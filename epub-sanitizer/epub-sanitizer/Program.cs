@@ -1,22 +1,63 @@
 ﻿namespace epub_sanitizer;
 
 using HtmlAgilityPack;
+using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using VersOne.Epub;
+using VersOne.Epub.Options;
 
 internal class Program
 {
+    // Make program userfriendly (Low prio feature)
+    //  - Input filepath to any location on disc containing books
+    //  - Store filapath location on config file
+    //      - Update filepath only if input differs 
+
+    // Get all files in Books folder and get all book names/titles
+
+    // Create list of filepaths
+
+    // Create a job for each book
+    //  
+    //  Feature? Detection stragety of book source/type with common defects
+    //  - create temp copy of book
+    //  - read each page
+    //  - detect defects
+    //  - sanitize defect
+    //  - save overwrite page
+
+    // Add to paralelles pool
+
+    // Run all jobs simultaneously
+
+    // Done
+
     static void Main(string[] args)
     {
         try
         {
-            var book = EpubReader.ReadBook(GetFilePath());
-            for (int i = 1; i < book.ReadingOrder.Count; i++)
+            var sw = new Stopwatch();
+            sw.Start();
+            var saveLocationPath = GetSaveFolderPath();
+            var files = GetFileNames();
+
+            foreach ( var file in files )
             {
-                ReadFile(book.ReadingOrder.ToArray()[i]);
+                if (file == null)
+                {
+                    continue;
+                }
+                var book = EpubReader.ReadBook(GetFilePath(file));
+                for (int i = 1; i < book.ReadingOrder.Count; i++)
+                {
+                    ReadFile(book.ReadingOrder.ToArray()[i]);
+                }
             }
+            sw.Stop();
+            Console.WriteLine($"Elapsed time: {sw.Elapsed.TotalSeconds} sek");
         }
         catch (Exception ex)
         {
@@ -24,17 +65,36 @@ internal class Program
         }
     }
 
-    private static string GetFilePath()
+    private static string GetFilePath(string fileName)
     {
         var location = Assembly.GetExecutingAssembly().Location;
         var directoryName = Path.GetDirectoryName(location);
         //var contents = File.ReadAllLines(Directory.EnumerateFiles(directoryName, "*.epub")?.FirstOrDefault());
 
-        return $"{directoryName}/Books/Would_Yo...xiaWorld.epub";
+        return $"{directoryName}/books/{fileName}";
+    }
+
+    private static string GetSaveFolderPath()
+    {
+        var location = Assembly.GetExecutingAssembly().Location;
+        var directoryName = Path.GetDirectoryName(location);
+        Directory.CreateDirectory($"{directoryName}/sanitized");
+
+        return $"{directoryName}/sanitized";
+    }
+
+    private static IEnumerable<string?> GetFileNames()
+    {
+        var location = Assembly.GetExecutingAssembly().Location;
+        var directoryName = Path.GetDirectoryName(location);
+        var fileNames = Directory.GetFiles($"{directoryName}/books", "*.epub").Select(Path.GetFileName);
+
+        return fileNames;
     }
 
     private static void ReadFile(EpubLocalTextContentFile file)
     {
+        Console.WriteLine(file.Content);
         var htmlDocument = new HtmlDocument
         {
             OptionFixNestedTags = true
@@ -51,10 +111,13 @@ internal class Program
         }
 
         var nodes = htmlDocument.DocumentNode.SelectNodes("//style");
-        foreach (var node in nodes)
+        if (nodes != null)
         {
-            node.ParentNode.RemoveChild(node);
-            _ = htmlDocument.DocumentNode.OuterHtml;
+            foreach (var node in nodes)
+            {
+                node.ParentNode.RemoveChild(node);
+                _ = htmlDocument.DocumentNode.OuterHtml;
+            }
         }
 
         Console.WriteLine(stringBuilder.AppendLine(htmlDocument.DocumentNode.OuterHtml.ToString()));
